@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package validator;
+
+option go_package = "github.com/LuhTonkaYeat/bookshelf/proto/validator";
+
+service AuthorValidator {
+  rpc Validate(ValidateRequest) returns (ValidateResponse);
+}
+
+message ValidateRequest {
+  string author = 1;
+}
+
+message ValidateResponse {
+  bool valid = 1;
+  string reason = 2;
+}
