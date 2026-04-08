@@ -1,0 +1,23 @@
+/validator
+/bookshelf
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+*.test
+*.out
+vendor/
+
+.env
+.env.local
+
+# Логи
+*.log
