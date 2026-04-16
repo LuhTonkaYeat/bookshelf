@@ -30,6 +30,13 @@ type SaveQuoteResponse struct {
 	Saved  bool   `json:"saved"`
 }
 
+type Quote struct {
+	ID        int    `json:"id"`
+	Quote     string `json:"quote"`
+	Author    string `json:"author"`
+	CreatedAt string `json:"created_at"`
+}
+
 var (
 	db         *sql.DB
 	grpcClient pb.AuthorValidatorClient
@@ -39,10 +46,13 @@ func main() {
 	initDB()
 	defer db.Close()
 
-	initGRPC()
+	conn := initGRPC()
+	defer conn.Close()
 
 	r := mux.NewRouter()
 	r.HandleFunc("/save", saveQuoteHandler).Methods("POST")
+	r.HandleFunc("/quotes", getQuotesHandler).Methods("GET")
+	r.HandleFunc("/quotes/{id}", deleteQuoteHandler).Methods("DELETE")
 	r.HandleFunc("/health", healthHandler).Methods("GET")
 
 	port := ":8080"
@@ -52,7 +62,7 @@ func main() {
 	}
 }
 
-func initGRPC() {
+func initGRPC() *grpc.ClientConn {
 	addr := os.Getenv("VALIDATOR_ADDR")
 	if addr == "" {
 		addr = "localhost:50051"
@@ -69,6 +79,7 @@ func initGRPC() {
 
 	grpcClient = pb.NewAuthorValidatorClient(conn)
 	log.Printf("Connected to validator gRPC service at %s", addr)
+	return conn
 }
 
 func initDB() {
@@ -165,4 +176,47 @@ func saveQuoteHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(response)
+}
+
+func getQuotesHandler(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.Query("SELECT id, quote, author, created_at FROM quotes ORDER BY id DESC")
+	if err != nil {
+		log.Printf("DB error: %v", err)
+		http.Error(w, "Failed to fetch quotes", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	quotes := []Quote{}
+	for rows.Next() {
+		var q Quote
+		err := rows.Scan(&q.ID, &q.Quote, &q.Author, &q.CreatedAt)
+		if err != nil {
+			log.Printf("Scan error: %v", err)
+			continue
+		}
+		quotes = append(quotes, q)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(quotes)
+}
+
+func deleteQuoteHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	result, err := db.Exec("DELETE FROM quotes WHERE id = $1", id)
+	if err != nil {
+		log.Printf("DB error: %v", err)
+		http.Error(w, "Failed to delete quote", http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		http.Error(w, "Quote not found", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
